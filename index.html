@@ -146,7 +146,7 @@
 
     <script>
         const MEAL_NAMES = ["Sabah", "Ara Öğün 1", "Öğlen", "Ara Öğün 2", "Akşam", "Ara Öğün 3"];
-        const MODEL_NAME = "gemini-3.8-flash";
+        const ENDPOINT_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent";
         const aiCache = {};
 
         let geminiApiKey = localStorage.getItem('gemini_api_key') || '';
@@ -186,25 +186,29 @@
             closeKeyModal();
         }
 
-        async function callGeminiWithTimeout(promptText, keyToUse) {
+        async function callGeminiAPI(promptText, keyToUse) {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 10000);
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${encodeURIComponent(keyToUse)}`;
+            const timeoutId = setTimeout(() => controller.abort(), 12000);
 
             try {
-                const res = await fetch(url, {
+                const res = await fetch(ENDPOINT_URL, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ contents: [{ parts: [{ text: promptText }] }] }),
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-goog-api-key': keyToUse.trim()
+                    },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: promptText }] }]
+                    }),
                     signal: controller.signal
                 });
                 clearTimeout(timeoutId);
                 const data = await res.json();
-                if (!res.ok) throw new Error(`${res.status}: ${data.error?.message || 'API Reddetti'}`);
+                if (!res.ok) throw new Error(`${res.status}: ${data.error?.message || 'API Hatası'}`);
                 return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
             } catch (err) {
                 clearTimeout(timeoutId);
-                if (err.name === 'AbortError') throw new Error("Zaman aşımı (10 sn) - Ağ yanıt vermedi");
+                if (err.name === 'AbortError') throw new Error("Zaman aşımı (12 sn)");
                 throw err;
             }
         }
@@ -216,8 +220,8 @@
             if (!key) { resBox.innerText = "❌ Önce anahtar gir."; return; }
             resBox.innerText = "⏳ Bağlanıyor...";
             try {
-                const reply = await callGeminiWithTimeout("Sadece 'BAĞLANDI' yaz.", key);
-                resBox.innerText = `✅ Başarılı (${MODEL_NAME}): ${reply}`;
+                const reply = await callGeminiAPI("Sadece 'BAĞLANDI' yaz.", key);
+                resBox.innerText = `✅ Başarılı: ${reply}`;
             } catch (e) {
                 resBox.innerText = `❌ Hata: ${e.message}`;
             }
@@ -289,7 +293,7 @@
             const prompt = `"${query}" için Türkiye'de en yaygın 4 çeşidi 100g/ml besin değerleriyle SADECE JSON dizisi olarak döndür. Başka hiçbir metin yazma: [{"name":"Ürün Adı","p":10,"c":5,"f":18,"kcal":220,"unitWeight":30}]`;
 
             try {
-                const raw = await callGeminiWithTimeout(prompt, geminiApiKey);
+                const raw = await callGeminiAPI(prompt, geminiApiKey);
                 const jsonMatch = raw.match(/\[[\s\S]*\]/);
                 if (!jsonMatch) throw new Error("Geçersiz AI yanıtı");
                 const parsed = JSON.parse(jsonMatch[0]);
