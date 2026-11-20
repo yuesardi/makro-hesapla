@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Makro & Kalori Takip</title>
+    <style>
+        :root {
+            --bg-main: #0d0d0d;
+            --bg-card: #18181b;
+            --bg-input: #27272a;
+            --text-main: #ffffff;
+            --text-muted: #a1a1aa;
+            --accent-red: #e11d48;
+            --accent-red-hover: #be123c;
+            --border-color: #2e2e32;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background-color: var(--bg-main);
+            color: var(--text-main);
+            padding: 16px;
+            padding-bottom: 130px;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        header h1 {
+            font-size: 1.4rem;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+        }
+
+        header h1 span {
+            color: var(--accent-red);
+        }
+
+        .nav-tabs {
+            display: flex;
+            gap: 8px;
+        }
+
+        .tab-btn {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            color: var(--text-muted);
+            padding: 6px 14px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .tab-btn.active {
+            background-color: var(--accent-red);
+            border-color: var(--accent-red);
+            color: var(--text-main);
+        }
+
+        /* Öğün Kartları */
+        .meal-card {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 14px;
+            padding: 14px;
+            margin-bottom: 16px;
+            transition: opacity 0.25s ease, border-color 0.25s ease;
+        }
+
+        .meal-card.locked {
+            border-color: #3f3f46;
+            background-color: #121214;
+        }
+
+        .meal-card.locked .rows-container,
+        .meal-card.locked .add-row-btn {
+            pointer-events: none;
+            opacity: 0.55;
+        }
+
+        .meal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .meal-title {
+            font-size: 1.05rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .meal-title::before {
+            content: "";
+            display: inline-block;
+            width: 4px;
+            height: 16px;
+            background-color: var(--accent-red);
+            border-radius: 2px;
+        }
+
+        .lock-badge {
+            font-size: 0.75rem;
+            color: var(--accent-red);
+            font-weight: 600;
+            display: none;
+        }
+
+        .meal-card.locked .lock-badge {
+            display: inline;
+        }
+
+        /* Satır Yapısı */
+        .food-row {
+            display: grid;
+            grid-template-columns: 62px 58px 1fr 56px;
+            gap: 6px;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        select, input {
+            background-color: var(--bg-input);
+            border: 1px solid transparent;
+            color: var(--text-main);
+            padding: 9px 6px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            width: 100%;
+            outline: none;
+        }
+
+        select:focus, input:focus {
+            border-color: var(--accent-red);
+        }
+
+        input[type="number"] {
+            text-align: center;
+        }
+
+        .row-kcal {
+            text-align: right;
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--text-main);
+            white-space: nowrap;
+        }
+
+        .row-kcal.loading {
+            color: var(--accent-red);
+            font-size: 0.75rem;
+        }
+
+        .row-kcal small {
+            color: var(--text-muted);
+            font-weight: 400;
+            font-size: 0.7rem;
+        }
+
+        /* Öğün Altı Kontroller ve Özet */
+        .meal-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .add-row-btn {
+            background: transparent;
+            border: 1px dashed var(--text-muted);
+            color: var(--text-muted);
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            cursor: pointer;
+        }
+
+        .toggle-lock-btn {
+            background-color: var(--accent-red);
+            color: var(--text-main);
+            border: none;
+            padding: 7px 16px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .meal-card.locked .toggle-lock-btn {
+            background-color: var(--bg-input);
+            border: 1px solid var(--text-muted);
+        }
+
+        .meal-summary {
+            margin-top: 10px;
+            background-color: #0d0d0d;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .meal-summary strong {
+            color: var(--text-main);
+        }
+
+        .meal-summary .kcal-highlight {
+            color: var(--accent-red);
+            font-weight: 700;
+        }
+
+        /* Geçmiş Deposu Stilleri */
+        .history-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 14px;
+            gap: 8px;
+        }
+
+        .backup-btn {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            padding: 7px 12px;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            cursor: pointer;
+        }
+
+        .history-card {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 14px;
+            margin-bottom: 10px;
+        }
+
+        .history-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+        }
+
+        .history-date {
+            font-weight: 700;
+            font-size: 0.95rem;
+        }
+
+        .history-kcal {
+            color: var(--accent-red);
+            font-weight: 800;
+            font-size: 1.05rem;
+        }
+
+        .history-macros {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-top: 4px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .history-details {
+            display: none;
+            margin-top: 12px;
+            padding-top: 10px;
+            border-top: 1px solid var(--border-color);
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        .history-card.open .history-details {
+            display: block;
+        }
+
+        .history-meal-item {
+            margin-bottom: 6px;
+        }
+
+        .history-meal-item strong {
+            color: var(--text-main);
+        }
+
+        .delete-history-btn {
+            margin-top: 8px;
+            background: transparent;
+            border: 1px solid #52525b;
+            color: #a1a1aa;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            cursor: pointer;
+        }
+
+        /* Gün Sonu Sabit Bar */
+        .daily-footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background-color: #141417;
+            border-top: 2px solid var(--accent-red);
+            padding: 12px 16px;
+            z-index: 100;
+            box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.8);
+        }
+
+        .daily-footer-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .daily-footer-title {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: var(--text-muted);
+        }
+
+        .footer-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .reset-btn {
+            background: transparent;
+            border: 1px solid #52525b;
+            color: var(--text-muted);
+            padding: 5px 10px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .save-day-btn {
+            background-color: var(--accent-red);
+            border: none;
+            color: var(--text-main);
+            padding: 5px 12px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .daily-stats {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.9rem;
+        }
+
+        .macro-group {
+            display: flex;
+            gap: 12px;
+        }
+
+        .macro-item span {
+            color: var(--text-muted);
+            font-size: 0.75rem;
+        }
+
+        .macro-item strong {
+            color: var(--text-main);
+            font-weight: 700;
+        }
+
+        .total-kcal {
+            font-size: 1.15rem;
+            font-weight: 800;
+            color: var(--accent-red);
+        }
+
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>MAKRO<span>TAKİP</span></h1>
+        <div class="nav-tabs">
+            <button class="tab-btn active" id="tab-daily" onclick="switchTab('daily')">Günlük</button>
+            <button class="tab-btn" id="tab-history" onclick="switchTab('history')">Geçmiş (<span id="history-count">0</span>)</button>
+        </div>
+    </header>
+
+    <!-- GÜNLÜK EKRANI -->
+    <div id="daily-view">
+        <div id="meals-wrapper"></div>
+    </div>
+
+    <!-- GEÇMİŞ DEPOSU EKRANI -->
+    <div id="history-view" class="hidden">
+        <div class="history-controls">
+            <span style="font-size: 0.8rem; color: var(--text-muted);">Detay için güne dokun</span>
+            <div>
+                <button class="backup-btn" onclick="exportBackup()">Yedek İndir</button>
+                <button class="backup-btn" onclick="document.getElementById('import-file').click()">Yükle</button>
+                <input type="file" id="import-file" accept=".json" class="hidden" onchange="importBackup(event)">
+            </div>
+        </div>
+        <div id="history-list"></div>
+    </div>
+
+    <!-- SABİT ALT BAR -->
+    <div class="daily-footer" id="daily-footer">
+        <div class="daily-footer-top">
+            <span class="daily-footer-title" id="matched-status">Gün Sonu Toplamı</span>
+            <div class="footer-actions">
+                <button class="reset-btn" onclick="resetDay()">Temizle</button>
+                <button class="save-day-btn" onclick="saveDayToHistory()">Günü Kaydet</button>
+            </div>
+        </div>
+        <div class="daily-stats">
+            <div class="macro-group">
+                <div class="macro-item"><span>P:</span> <strong id="total-p">0g</strong></div>
+                <div class="macro-item"><span>K:</span> <strong id="total-c">0g</strong></div>
+                <div class="macro-item"><span>Y:</span> <strong id="total-f">0g</strong></div>
+            </div>
+            <div class="total-kcal" id="total-kcal">0 kcal</div>
+        </div>
+    </div>
+
+    <script>
+        const MEAL_NAMES = [
+            "Sabah",
+            "Ara Öğün 1",
+            "Öğlen",
+            "Ara Öğün 2",
+            "Akşam",
+            "Ara Öğün 3"
+        ];
+
+        const LOCAL_DB = {
+            "yumurta": { p: 13, c: 1.1, f: 11, kcal: 155, unitWeight: 50 },
+            "yulaf": { p: 13, c: 60, f: 7, kcal: 370, unitWeight: 100 },
+            "pirinç": { p: 7, c: 78, f: 0.6, kcal: 350, unitWeight: 100 },
+            "tavuk göğsü": { p: 23, c: 0, f: 1.5, kcal: 110, unitWeight: 100 },
+            "tavuk": { p: 23, c: 0, f: 1.5, kcal: 110, unitWeight: 100 },
+            "kıyma": { p: 20, c: 0, f: 15, kcal: 215, unitWeight: 100 },
+            "muz": { p: 1.1, c: 23, f: 0.3, kcal: 89, unitWeight: 120 },
+            "süt": { p: 3.3, c: 4.8, f: 3.2, kcal: 61, unitWeight: 200 },
+            "ekmek": { p: 9, c: 49, f: 3.2, kcal: 265, unitWeight: 25 },
+            "kaşar": { p: 25, c: 1.5, f: 27, kcal: 350, unitWeight: 30 },
+            "tereyağı": { p: 0.8, c: 0.1, f: 81, kcal: 717, unitWeight: 10 },
+            "zeytinyağı": { p: 0, c: 0, f: 100, kcal: 884, unitWeight: 10 },
+            "pirinç unu": { p: 6, c: 80, f: 1, kcal: 360, unitWeight: 100 },
+            "granola": { p: 10, c: 64, f: 15, kcal: 430, unitWeight: 100 }
+        };
+
+        const apiCache = {};
+        let appState = JSON.parse(localStorage.getItem('macroAppState_v1')) || initDefaultState();
+        let historyData = JSON.parse(localStorage.getItem('macroHistory_v1')) || [];
+
+        function initDefaultState() {
+            return MEAL_NAMES.map(name => ({
+                name: name,
+                locked: false,
+                rows: Array.from({ length: 4 }, () => ({
+                    unit: 'gr',
+                    amount: '',
+                    food: '',
+                    macros: { p: 0, c: 0, f: 0, kcal: 0 }
+                }))
+            }));
+        }
+
+        function saveState() {
+            localStorage.setItem('macroAppState_v1', JSON.stringify(appState));
+        }
+
+        function saveHistoryStorage() {
+            localStorage.setItem('macroHistory_v1', JSON.stringify(historyData));
+            document.getElementById('history-count').innerText = historyData.length;
+        }
+
+        function switchTab(tab) {
+            const dailyView = document.getElementById('daily-view');
+            const historyView = document.getElementById('history-view');
+            const footer = document.getElementById('daily-footer');
+            const tabDaily = document.getElementById('tab-daily');
+            const tabHistory = document.getElementById('tab-history');
+
+            if (tab === 'daily') {
+                dailyView.classList.remove('hidden');
+                footer.classList.remove('hidden');
+                historyView.classList.add('hidden');
+                tabDaily.classList.add('active');
+                tabHistory.classList.remove('active');
+            } else {
+                dailyView.classList.add('hidden');
+                footer.classList.add('hidden');
+                historyView.classList.remove('hidden');
+                tabDaily.classList.remove('active');
+                tabHistory.classList.add('active');
+                renderHistory();
+            }
+        }
+
+        function renderApp() {
+            const wrapper = document.getElementById('meals-wrapper');
+            wrapper.innerHTML = '';
+
+            appState.forEach((meal, mIdx) => {
+                const card = document.createElement('div');
+                card.className = `meal-card ${meal.locked ? 'locked' : ''}`;
+                card.id = `meal-card-${mIdx}`;
+
+                let rowsHtml = '';
+                meal.rows.forEach((row, rIdx) => {
+                    rowsHtml += `
+                        <div class="food-row">
+                            <select onchange="updateRow(${mIdx}, ${rIdx}, 'unit', this.value)">
+                                <option value="adet" ${row.unit === 'adet' ? 'selected' : ''}>Adet</option>
+                                <option value="gr" ${row.unit === 'gr' ? 'selected' : ''}>Gr</option>
+                                <option value="ml" ${row.unit === 'ml' ? 'selected' : ''}>Ml</option>
+                            </select>
+                            <input type="number" inputmode="decimal" placeholder="0" value="${row.amount}" 
+                                oninput="updateRow(${mIdx}, ${rIdx}, 'amount', this.value)">
+                            <input type="text" placeholder="Ürün adı..." value="${row.food}" 
+                                onchange="updateRow(${mIdx}, ${rIdx}, 'food', this.value)">
+                            <div class="row-kcal" id="kcal-${mIdx}-${rIdx}">
+                                ${Math.round(row.macros.kcal)} <small>kcal</small>
+                            </div>
+                        </div>
+                    `;
+                });
+
+                card.innerHTML = `
+                    <div class="meal-header">
+                        <div class="meal-title">${meal.name}</div>
+                        <span class="lock-badge">🔒 Kilitli</span>
+                    </div>
+                    <div class="rows-container">${rowsHtml}</div>
+                    <div class="meal-actions">
+                        <button class="add-row-btn" onclick="addRow(${mIdx})">+ Satır Ekle</button>
+                        <button class="toggle-lock-btn" onclick="toggleLock(${mIdx})">
+                            ${meal.locked ? 'Düzenle' : 'Tamam'}
+                        </button>
+                    </div>
+                    <div class="meal-summary" id="summary-${mIdx}"></div>
+                `;
+
+                wrapper.appendChild(card);
+                updateMealSummary(mIdx);
+            });
+
+            updateDailyTotals();
+            document.getElementById('history-count').innerText = historyData.length;
+        }
+
+        function addRow(mIdx) {
+            appState[mIdx].rows.push({
+                unit: 'gr',
+                amount: '',
+                food: '',
+                macros: { p: 0, c: 0, f: 0, kcal: 0 }
+            });
+            saveState();
+            renderApp();
+        }
+
+        function toggleLock(mIdx) {
+            appState[mIdx].locked = !appState[mIdx].locked;
+            saveState();
+            renderApp();
+        }
+
+        async function fetchNutrition(query) {
+            const cleanQuery = query.trim().toLowerCase();
+            if (!cleanQuery) return null;
+
+            for (const key in LOCAL_DB) {
+                if (cleanQuery === key || cleanQuery.includes(key) || key.includes(cleanQuery)) {
+                    return LOCAL_DB[key];
+                }
+            }
+
+            if (apiCache[cleanQuery]) return apiCache[cleanQuery];
+
+            try {
+                document.getElementById('matched-status').innerText = "Aranıyor...";
+                const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(cleanQuery)}&search_simple=1&action=process&json=1&page_size=5`;
+                const res = await fetch(url);
+                const data = await res.json();
+
+                if (data.products && data.products.length > 0) {
+                    const validProduct = data.products.find(p => p.nutriments && (p.nutriments['energy-kcal_100g'] || p.nutriments['energy-kcal'])) || data.products[0];
+                    const n = validProduct.nutriments || {};
+                    
+                    const result = {
+                        p: parseFloat(n.proteins_100g || 0),
+                        c: parseFloat(n.carbohydrates_100g || 0),
+                        f: parseFloat(n.fat_100g || 0),
+                        kcal: parseFloat(n['energy-kcal_100g'] || n['energy-kcal'] || 0),
+                        unitWeight: parseFloat(validProduct.serving_quantity || 100)
+                    };
+                    apiCache[cleanQuery] = result;
+                    document.getElementById('matched-status').innerText = `Eşleşti: ${validProduct.product_name || cleanQuery}`;
+                    return result;
+                }
+            } catch (e) {
+                console.error("API hatası:", e);
+            }
+            document.getElementById('matched-status').innerText = "Bulunamadı";
+            return null;
+        }
+
+        let debounceTimers = {};
+
+        function updateRow(mIdx, rIdx, field, value) {
+            const row = appState[mIdx].rows[rIdx];
+            row[field] = value;
+
+            const timerKey = `${mIdx}-${rIdx}`;
+            clearTimeout(debounceTimers[timerKey]);
+
+            debounceTimers[timerKey] = setTimeout(async () => {
+                const amount = parseFloat(row.amount);
+                const kcalEl = document.getElementById(`kcal-${mIdx}-${rIdx}`);
+
+                if (!row.food.trim() || isNaN(amount) || amount <= 0) {
+                    row.macros = { p: 0, c: 0, f: 0, kcal: 0 };
+                    if (kcalEl) kcalEl.innerHTML = `0 <small>kcal</small>`;
+                    updateMealSummary(mIdx);
+                    updateDailyTotals();
+                    saveState();
+                    return;
+                }
+
+                if (kcalEl) {
+                    kcalEl.classList.add('loading');
+                    kcalEl.innerText = "...";
+                }
+
+                const baseData = await fetchNutrition(row.food);
+                if (kcalEl) kcalEl.classList.remove('loading');
+
+                if (baseData) {
+                    let multiplier = 0;
+                    if (row.unit === 'gr' || row.unit === 'ml') {
+                        multiplier = amount / 100;
+                    } else if (row.unit === 'adet') {
+                        multiplier = (amount * (baseData.unitWeight || 100)) / 100;
+                    }
+
+                    row.macros = {
+                        p: baseData.p * multiplier,
+                        c: baseData.c * multiplier,
+                        f: baseData.f * multiplier,
+                        kcal: baseData.kcal * multiplier
+                    };
+                } else {
+                    row.macros = { p: 0, c: 0, f: 0, kcal: 0 };
+                }
+
+                if (kcalEl) {
+                    kcalEl.innerHTML = `${Math.round(row.macros.kcal)} <small>kcal</small>`;
+                }
+
+                updateMealSummary(mIdx);
+                updateDailyTotals();
+                saveState();
+            }, 400);
+        }
+
+        function getDailyTotals() {
+            return appState.reduce((acc, meal) => {
+                meal.rows.forEach(r => {
+                    acc.p += r.macros.p;
+                    acc.c += r.macros.c;
+                    acc.f += r.macros.f;
+                    acc.kcal += r.macros.kcal;
+                });
+                return acc;
+            }, { p: 0, c: 0, f: 0, kcal: 0 });
+        }
+
+        function updateMealSummary(mIdx) {
+            const meal = appState[mIdx];
+            const totals = meal.rows.reduce((acc, r) => {
+                acc.p += r.macros.p;
+                acc.c += r.macros.c;
+                acc.f += r.macros.f;
+                acc.kcal += r.macros.kcal;
+                return acc;
+            }, { p: 0, c: 0, f: 0, kcal: 0 });
+
+            const summaryEl = document.getElementById(`summary-${mIdx}`);
+            if (summaryEl) {
+                summaryEl.innerHTML = `
+                    <span>P: <strong>${totals.p.toFixed(1)}g</strong> · K: <strong>${totals.c.toFixed(1)}g</strong> · Y: <strong>${totals.f.toFixed(1)}g</strong></span>
+                    <span class="kcal-highlight">${Math.round(totals.kcal)} kcal</span>
+                `;
+            }
+        }
+
+        function updateDailyTotals() {
+            const daily = getDailyTotals();
+            document.getElementById('total-p').innerText = `${daily.p.toFixed(1)}g`;
+            document.getElementById('total-c').innerText = `${daily.c.toFixed(1)}g`;
+            document.getElementById('total-f').innerText = `${daily.f.toFixed(1)}g`;
+            document.getElementById('total-kcal').innerText = `${Math.round(daily.kcal)} kcal`;
+        }
+
+        // Günü Geçmiş Deposuna Kaydetme
+        function saveDayToHistory() {
+            const totals = getDailyTotals();
+            if (totals.kcal <= 0) {
+                alert("Kaydetmek için en az bir besin girmelisin.");
+                return;
+            }
+
+            const now = new Date();
+            const dateStr = now.toLocaleDateString('tr-TR', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric'
+            });
+
+            // Sadece dolu satırları özet olarak sakla
+            const filledMeals = appState
+                .map(m => ({
+                    name: m.name,
+                    items: m.rows
+                        .filter(r => r.food.trim() && parseFloat(r.amount) > 0)
+                        .map(r => `${r.amount} ${r.unit} ${r.food} (${Math.round(r.macros.kcal)} kcal)`)
+                }))
+                .filter(m => m.items.length > 0);
+
+            const record = {
+                id: dateStr,
+                date: dateStr,
+                totals: {
+                    p: Number(totals.p.toFixed(1)),
+                    c: Number(totals.c.toFixed(1)),
+                    f: Number(totals.f.toFixed(1)),
+                    kcal: Math.round(totals.kcal)
+                },
+                meals: filledMeals
+            };
+
+            const existingIdx = historyData.findIndex(item => item.id === dateStr);
+            if (existingIdx > -1) {
+                historyData[existingIdx] = record;
+            } else {
+                historyData.unshift(record);
+            }
+
+            saveHistoryStorage();
+            alert(`${dateStr} tarihi ${record.totals.kcal} kcal olarak depoya kaydedildi.`);
+        }
+
+        function renderHistory() {
+            const listEl = document.getElementById('history-list');
+            if (historyData.length === 0) {
+                listEl.innerHTML = `<p style="color: var(--text-muted); text-align: center; margin-top: 40px; font-size: 0.9rem;">Henüz kaydedilmiş bir gün yok.</p>`;
+                return;
+            }
+
+            listEl.innerHTML = historyData.map((item, idx) => {
+                const mealsHtml = item.meals.map(m => `
+                    <div class="history-meal-item">
+                        <strong>${m.name}:</strong> ${m.items.join(', ')}
+                    </div>
+                `).join('');
+
+                return `
+                    <div class="history-card" id="hist-${idx}">
+                        <div class="history-top" onclick="document.getElementById('hist-${idx}').classList.toggle('open')">
+                            <span class="history-date">${item.date}</span>
+                            <span class="history-kcal">${item.totals.kcal} kcal</span>
+                        </div>
+                        <div class="history-macros">
+                            <span>Protein: ${item.totals.p}g · Karb: ${item.totals.c}g · Yağ: ${item.totals.f}g</span>
+                            <span>▼</span>
+                        </div>
+                        <div class="history-details">
+                            ${mealsHtml}
+                            <button class="delete-history-btn" onclick="deleteHistoryItem(${idx})">Kaydı Sil</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function deleteHistoryItem(idx) {
+            if (confirm("Bu günün kaydını silmek istiyor musun?")) {
+                historyData.splice(idx, 1);
+                saveHistoryStorage();
+                renderHistory();
+            }
+        }
+
+        function resetDay() {
+            if (confirm("Mevcut ekranı yeni gün için temizlemek istiyor musun? (Kaydedilmiş geçmişin silinmez)")) {
+                appState = initDefaultState();
+                saveState();
+                renderApp();
+            }
+        }
+
+        function exportBackup() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(historyData, null, 2));
+            const dlAnchor = document.createElement('a');
+            dlAnchor.setAttribute("href", dataStr);
+            dlAnchor.setAttribute("download", `makro_gecmis_yedek.json`);
+            document.body.appendChild(dlAnchor);
+            dlAnchor.click();
+            dlAnchor.remove();
+        }
+
+        function importBackup(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const imported = JSON.parse(e.target.result);
+                    if (Array.isArray(imported)) {
+                        historyData = imported;
+                        saveHistoryStorage();
+                        renderHistory();
+                        alert("Yedek başarıyla yüklendi.");
+                    }
+                } catch (err) {
+                    alert("Geçersiz yedek dosyası.");
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        renderApp();
+    </script>
+</body>
+</html>
