@@ -146,7 +146,12 @@
 
     <script>
         const MEAL_NAMES = ["Sabah", "Ara Öğün 1", "Öğlen", "Ara Öğün 2", "Akşam", "Ara Öğün 3"];
-        const ENDPOINT_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent";
+        const MODELS = [
+            "gemini-flash-latest",
+            "gemini-flash-lite-latest",
+            "gemini-pro-latest",
+            "gemma-3-27b-it"
+        ];
         const aiCache = {};
 
         let geminiApiKey = localStorage.getItem('gemini_api_key') || '';
@@ -186,31 +191,34 @@
             closeKeyModal();
         }
 
-        async function callGeminiAPI(promptText, keyToUse) {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 12000);
+        async function callGeminiWithFallback(promptText, keyToUse) {
+            let lastError = null;
 
-            try {
-                const res = await fetch(ENDPOINT_URL, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-goog-api-key': keyToUse.trim()
-                    },
-                    body: JSON.stringify({
-                        contents: [{ parts: [{ text: promptText }] }]
-                    }),
-                    signal: controller.signal
-                });
-                clearTimeout(timeoutId);
-                const data = await res.json();
-                if (!res.ok) throw new Error(`${res.status}: ${data.error?.message || 'API Hatası'}`);
-                return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-            } catch (err) {
-                clearTimeout(timeoutId);
-                if (err.name === 'AbortError') throw new Error("Zaman aşımı (12 sn)");
-                throw err;
+            for (const model of MODELS) {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 9000);
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+
+                try {
+                    const res = await fetch(url, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-goog-api-key': keyToUse.trim()
+                        },
+                        body: JSON.stringify({
+                            contents: [{ parts: [{ text: promptText }] }]
+                        }),
+                        signal: controller.signal
+                    });
+                    clearTimeout(timeoutId);
+                    const data = await res.json();
+
+                    if (!res.ok) {
+                        lastError = new Error(`${model} (${res.status}): ${data.error?.message \vert{}\vert{} 'Hata'}`); // Yoğunluk (503/429) veya model bulunamama (404) durumunda sıradaki modele geç if (res.status === 503 \vert{}\vert{} res.status === 429 \vert{}\vert{} res.status === 404) continue; throw lastError; }  const text = data.candidates?.[0]?.content?.parts?.[0]?.text \vert{}\vert{} ''; if (text) return { text, model }; } catch (err) { clearTimeout(timeoutId); lastError = err.name === 'AbortError' ? new Error(`${model}: Zaman aşımı`) : err;
+                }
             }
+            throw lastError || new Error("Tüm modeller yoğun");
         }
 
         async function testApiConnection() {
@@ -218,239 +226,15 @@
             const resBox = document.getElementById('test-result');
             resBox.classList.remove('hidden');
             if (!key) { resBox.innerText = "❌ Önce anahtar gir."; return; }
-            resBox.innerText = "⏳ Bağlanıyor...";
+            resBox.innerText = "⏳ Modeller deneniyor...";
             try {
-                const reply = await callGeminiAPI("Sadece 'BAĞLANDI' yaz.", key);
-                resBox.innerText = `✅ Başarılı: ${reply}`;
+                const { text, model } = await callGeminiWithFallback("Sadece 'BAĞLANDI' yaz.", key);
+                resBox.innerText = `✅ Başarılı (${model}):${text}`;
             } catch (e) {
-                resBox.innerText = `❌ Hata: ${e.message}`;
-            }
-        }
-
-        function switchTab(tab) {
-            document.getElementById('daily-view').classList.toggle('hidden', tab !== 'daily');
-            document.getElementById('daily-footer').classList.toggle('hidden', tab !== 'daily');
-            document.getElementById('history-view').classList.toggle('hidden', tab === 'daily');
-            document.getElementById('tab-daily').classList.toggle('active', tab === 'daily');
-            document.getElementById('tab-history').classList.toggle('active', tab !== 'daily');
-            if (tab !== 'daily') renderHistory();
-        }
-
-        function renderApp() {
-            const wrapper = document.getElementById('meals-wrapper');
-            wrapper.innerHTML = '';
-            appState.forEach((meal, mIdx) => {
-                const card = document.createElement('div');
-                card.className = `meal-card ${meal.locked ? 'locked' : ''}`;
+                resBox.innerText = `❌ Hata: ${e.message}`; } }  function switchTab(tab) { document.getElementById('daily-view').classList.toggle('hidden', tab !== 'daily'); document.getElementById('daily-footer').classList.toggle('hidden', tab !== 'daily'); document.getElementById('history-view').classList.toggle('hidden', tab === 'daily'); document.getElementById('tab-daily').classList.toggle('active', tab === 'daily'); document.getElementById('tab-history').classList.toggle('active', tab !== 'daily'); if (tab !== 'daily') renderHistory(); }  function renderApp() { const wrapper = document.getElementById('meals-wrapper'); wrapper.innerHTML = ''; appState.forEach((meal, mIdx) => { const card = document.createElement('div'); card.className = `meal-card ${meal.locked ? 'locked' : ''}`;
                 let rowsHtml = meal.rows.map((row, rIdx) => `
                     <div class="food-row-wrapper">
                         <div class="food-row">
-                            <select onchange="handleUnitOrAmountChange(${mIdx}, ${rIdx}, 'unit', this.value)">
+                            <select onchange="handleUnitOrAmountChange(${mIdx},${rIdx}, 'unit', this.value)">
                                 <option value="adet" ${row.unit === 'adet' ? 'selected' : ''}>Adet</option>
-                                <option value="gr" ${row.unit === 'gr' ? 'selected' : ''}>Gr</option>
-                                <option value="ml" ${row.unit === 'ml' ? 'selected' : ''}>Ml</option>
-                            </select>
-                            <input type="number" inputmode="decimal" placeholder="0" value="${row.amount}" oninput="handleUnitOrAmountChange(${mIdx}, ${rIdx}, 'amount', this.value)">
-                            <input type="text" placeholder="Ürün adı..." value="${row.food}" oninput="handleFoodInput(${mIdx}, ${rIdx}, this.value)">
-                            <div class="row-kcal" id="kcal-${mIdx}-${rIdx}">${Math.round(row.macros.kcal)} <small>kcal</small></div>
-                        </div>
-                        <div class="suggestions-dropdown hidden" id="sug-${mIdx}-${rIdx}"></div>
-                    </div>
-                `).join('');
-
-                card.innerHTML = `
-                    <div class="meal-header"><div class="meal-title">${meal.name}</div><span class="lock-badge">🔒 Kilitli</span></div>
-                    <div class="rows-container">${rowsHtml}</div>
-                    <div class="meal-actions">
-                        <button class="add-row-btn" onclick="addRow(${mIdx})">+ Satır Ekle</button>
-                        <button class="toggle-lock-btn" onclick="toggleLock(${mIdx})">${meal.locked ? 'Düzenle' : 'Tamam'}</button>
-                    </div>
-                    <div class="meal-summary" id="summary-${mIdx}"></div>
-                `;
-                wrapper.appendChild(card);
-                updateMealSummary(mIdx);
-            });
-            updateDailyTotals();
-            updateKeyButtonUI();
-            document.getElementById('history-count').innerText = historyData.length;
-        }
-
-        function addRow(mIdx) {
-            appState[mIdx].rows.push({ unit: 'gr', amount: '', food: '', selectedBase: null, macros: { p: 0, c: 0, f: 0, kcal: 0 } });
-            saveState(); renderApp();
-        }
-        function toggleLock(mIdx) { appState[mIdx].locked = !appState[mIdx].locked; saveState(); renderApp(); }
-
-        async function searchFoodOptions(query) {
-            const cleanQuery = query.trim().toLowerCase();
-            if (!cleanQuery) return [];
-            if (aiCache[cleanQuery]) return aiCache[cleanQuery];
-
-            const statusEl = document.getElementById('matched-status');
-            if (!geminiApiKey) { statusEl.innerText = "Önce 🔑 AI Ekle"; return []; }
-
-            statusEl.innerText = "🤖 AI hesaplıyor...";
-            const prompt = `"${query}" için Türkiye'de en yaygın 4 çeşidi 100g/ml besin değerleriyle SADECE JSON dizisi olarak döndür. Başka hiçbir metin yazma: [{"name":"Ürün Adı","p":10,"c":5,"f":18,"kcal":220,"unitWeight":30}]`;
-
-            try {
-                const raw = await callGeminiAPI(prompt, geminiApiKey);
-                const jsonMatch = raw.match(/\[[\s\S]*\]/);
-                if (!jsonMatch) throw new Error("Geçersiz AI yanıtı");
-                const parsed = JSON.parse(jsonMatch[0]);
-                aiCache[cleanQuery] = parsed;
-                statusEl.innerText = "🤖 AI Yanıtladı";
-                return parsed;
-            } catch (err) {
-                statusEl.innerText = `❌ ${err.message}`;
-                return [];
-            }
-        }
-
-        let debounceTimers = {};
-        function handleFoodInput(mIdx, rIdx, value) {
-            const row = appState[mIdx].rows[rIdx];
-            row.food = value;
-            saveState();
-            const timerKey = `${mIdx}-${rIdx}`;
-            clearTimeout(debounceTimers[timerKey]);
-            const sugBox = document.getElementById(`sug-${mIdx}-${rIdx}`);
-            if (value.trim().length < 2) { sugBox.classList.add('hidden'); return; }
-
-            debounceTimers[timerKey] = setTimeout(async () => {
-                const options = await searchFoodOptions(value);
-                if (!options.length) { sugBox.classList.add('hidden'); return; }
-                row.selectedBase = options[0];
-                recalculateRow(mIdx, rIdx);
-                sugBox.innerHTML = options.map(opt => `
-                    <div class="suggestion-item" onclick='selectFoodOption(${mIdx}, ${rIdx}, ${JSON.stringify(opt).replace(/'/g, "&apos;")})'>
-                        <div><div class="sug-name">${opt.name}</div><div class="sug-meta">100g: P ${opt.p}g · K ${opt.c}g · Y ${opt.f}g</div></div>
-                        <div class="sug-kcal">${Math.round(opt.kcal)} kcal</div>
-                    </div>
-                `).join('');
-                sugBox.classList.remove('hidden');
-            }, 600);
-        }
-
-        function selectFoodOption(mIdx, rIdx, option) {
-            const row = appState[mIdx].rows[rIdx];
-            row.food = option.name;
-            row.selectedBase = option;
-            const wrapper = document.getElementById(`sug-${mIdx}-${rIdx}`).parentElement;
-            wrapper.querySelector('input[type="text"]').value = option.name;
-            document.getElementById(`sug-${mIdx}-${rIdx}`).classList.add('hidden');
-            recalculateRow(mIdx, rIdx);
-        }
-
-        function handleUnitOrAmountChange(mIdx, rIdx, field, value) {
-            appState[mIdx].rows[rIdx][field] = value;
-            recalculateRow(mIdx, rIdx);
-        }
-
-        function recalculateRow(mIdx, rIdx) {
-            const row = appState[mIdx].rows[rIdx];
-            const amount = parseFloat(row.amount);
-            const kcalEl = document.getElementById(`kcal-${mIdx}-${rIdx}`);
-            if (!row.selectedBase || isNaN(amount) || amount <= 0) {
-                row.macros = { p: 0, c: 0, f: 0, kcal: 0 };
-                if (kcalEl) kcalEl.innerHTML = `0 <small>kcal</small>`;
-                updateMealSummary(mIdx); updateDailyTotals(); saveState(); return;
-            }
-            const mult = row.unit === 'adet' ? (amount * (row.selectedBase.unitWeight || 100)) / 100 : amount / 100;
-            row.macros = { p: row.selectedBase.p * mult, c: row.selectedBase.c * mult, f: row.selectedBase.f * mult, kcal: row.selectedBase.kcal * mult };
-            if (kcalEl) kcalEl.innerHTML = `${Math.round(row.macros.kcal)} <small>kcal</small>`;
-            updateMealSummary(mIdx); updateDailyTotals(); saveState();
-        }
-
-        document.addEventListener('click', (e) => {
-            if (!e.target.closest('.food-row-wrapper')) document.querySelectorAll('.suggestions-dropdown').forEach(el => el.classList.add('hidden'));
-        });
-
-        function getDailyTotals() {
-            return appState.reduce((acc, m) => {
-                m.rows.forEach(r => { acc.p += r.macros.p; acc.c += r.macros.c; acc.f += r.macros.f; acc.kcal += r.macros.kcal; });
-                return acc;
-            }, { p: 0, c: 0, f: 0, kcal: 0 });
-        }
-
-        function updateMealSummary(mIdx) {
-            const t = appState[mIdx].rows.reduce((a, r) => ({ p: a.p + r.macros.p, c: a.c + r.macros.c, f: a.f + r.macros.f, kcal: a.kcal + r.macros.kcal }), { p: 0, c: 0, f: 0, kcal: 0 });
-            const el = document.getElementById(`summary-${mIdx}`);
-            if (el) el.innerHTML = `<span>P: <strong>${t.p.toFixed(1)}g</strong> · K: <strong>${t.c.toFixed(1)}g</strong> · Y: <strong>${t.f.toFixed(1)}g</strong></span><span class="kcal-highlight">${Math.round(t.kcal)} kcal</span>`;
-        }
-
-        function updateDailyTotals() {
-            const d = getDailyTotals();
-            document.getElementById('total-p').innerText = `${d.p.toFixed(1)}g`;
-            document.getElementById('total-c').innerText = `${d.c.toFixed(1)}g`;
-            document.getElementById('total-f').innerText = `${d.f.toFixed(1)}g`;
-            document.getElementById('total-kcal').innerText = `${Math.round(d.kcal)} kcal`;
-        }
-
-        function buildCurrentRecord() {
-            const totals = getDailyTotals();
-            const dateStr = new Date().toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-            const meals = appState.map(m => ({
-                name: m.name,
-                items: m.rows.filter(r => r.food.trim() && parseFloat(r.amount) > 0).map(r => `${r.amount} ${r.unit} ${r.food} (${Math.round(r.macros.kcal)} kcal)`)
-            })).filter(m => m.items.length > 0);
-            return { id: dateStr, date: dateStr, totals: { p: +totals.p.toFixed(1), c: +totals.c.toFixed(1), f: +totals.f.toFixed(1), kcal: Math.round(totals.kcal) }, meals };
-        }
-
-        async function triggerShare(record) {
-            let text = `📅 ${record.date} Beslenme Özeti\n🔥 Toplam: ${record.totals.kcal} kcal\n📊 Makrolar: ${record.totals.p}g P | ${record.totals.c}g K | ${record.totals.f}g Y\n\n`;
-            record.meals.forEach(m => { text += `▪ ${m.name}:\n` + m.items.map(i => `  - ${i}`).join('\n') + '\n'; });
-            if (navigator.share) { try { await navigator.share({ text: text.trim() }); return; } catch (e) {} }
-            await navigator.clipboard.writeText(text.trim());
-            alert("Panoya kopyalandı!");
-        }
-
-        function shareCurrentDay() { const r = buildCurrentRecord(); if (r.totals.kcal > 0) triggerShare(r); }
-        function shareHistoryItem(idx) { if (historyData[idx]) triggerShare(historyData[idx]); }
-
-        function saveDayToHistory() {
-            const r = buildCurrentRecord();
-            if (r.totals.kcal <= 0) return alert("Besin girilmedi.");
-            const idx = historyData.findIndex(i => i.id === r.id);
-            if (idx > -1) historyData[idx] = r; else historyData.unshift(r);
-            saveHistoryStorage();
-            alert(`${r.date} kaydedildi.`);
-        }
-
-        function renderHistory() {
-            const listEl = document.getElementById('history-list');
-            if (!historyData.length) { listEl.innerHTML = `<p style="color:var(--text-muted);text-align:center;margin-top:40px;">Kayıt yok.</p>`; return; }
-            listEl.innerHTML = historyData.map((item, idx) => `
-                <div class="history-card" id="hist-${idx}">
-                    <div class="history-top" onclick="document.getElementById('hist-${idx}').classList.toggle('open')">
-                        <span class="history-date">${item.date}</span><span class="history-kcal">${item.totals.kcal} kcal</span>
-                    </div>
-                    <div class="history-macros"><span>P: ${item.totals.p}g · K: ${item.totals.c}g · Y: ${item.totals.f}g</span><span>▼</span></div>
-                    <div class="history-details">
-                        ${item.meals.map(m => `<div class="history-meal-item"><strong>${m.name}:</strong> ${m.items.join(', ')}</div>`).join('')}
-                        <div class="history-card-actions">
-                            <button class="share-history-btn" onclick="shareHistoryItem(${idx})">Paylaş</button>
-                            <button class="delete-history-btn" onclick="deleteHistoryItem(${idx})">Sil</button>
-                        </div>
-                    </div>
-                </div>
-            `).join('');
-        }
-
-        function deleteHistoryItem(idx) { if (confirm("Silinsin mi?")) { historyData.splice(idx, 1); saveHistoryStorage(); renderHistory(); } }
-        function resetDay() { if (confirm("Ekran temizlensin mi?")) { appState = initDefaultState(); saveState(); renderApp(); } }
-        function exportBackup() {
-            const a = document.createElement('a');
-            a.href = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(historyData));
-            a.download = "makro_yedek.json"; a.click();
-        }
-        function importBackup(e) {
-            const f = e.target.files[0]; if (!f) return;
-            const r = new FileReader();
-            r.onload = ev => { historyData = JSON.parse(ev.target.result); saveHistoryStorage(); renderHistory(); };
-            r.readAsText(f);
-        }
-
-        renderApp();
-    </script>
-</body>
-</html>
+                                <option
