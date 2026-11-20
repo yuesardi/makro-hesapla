@@ -79,7 +79,6 @@
             color: #4ade80;
         }
 
-        /* API Key Modal */
         .modal-overlay {
             position: fixed;
             inset: 0;
@@ -119,7 +118,6 @@
             margin-top: 12px;
         }
 
-        /* Öğün Kartları */
         .meal-card {
             background-color: var(--bg-card);
             border: 1px solid var(--border-color);
@@ -175,7 +173,6 @@
             display: inline;
         }
 
-        /* Satır Yapısı & Açılır Liste */
         .food-row-wrapper {
             position: relative;
             margin-bottom: 8px;
@@ -221,7 +218,6 @@
             font-size: 0.7rem;
         }
 
-        /* AI Seçim Listesi */
         .suggestions-dropdown {
             position: absolute;
             top: 100%;
@@ -273,7 +269,6 @@
             white-space: nowrap;
         }
 
-        /* Öğün Altı Kontroller */
         .meal-actions {
             display: flex;
             justify-content: space-between;
@@ -330,7 +325,6 @@
             font-weight: 700;
         }
 
-        /* Geçmiş Deposu Stilleri */
         .history-controls {
             display: flex;
             justify-content: space-between;
@@ -431,7 +425,6 @@
             cursor: pointer;
         }
 
-        /* Gün Sonu Sabit Bar */
         .daily-footer {
             position: fixed;
             bottom: 0;
@@ -540,12 +533,11 @@
         </div>
     </header>
 
-    <!-- API KEY MODAL -->
     <div class="modal-overlay hidden" id="key-modal">
         <div class="modal-box">
             <h3>Gemini AI Bağlantısı</h3>
-            <p>Besinleri doğru yorumlayıp seçenek sunması için Google AI Studio API anahtarını gir. Anahtar sadece kendi cihazında saklanır.</p>
-            <input type="password" id="gemini-key-input" placeholder="AIzaSy...">
+            <p>AI Studio'dan kopyaladığın anahtarı (AQ... veya AIza...) buraya yapıştır. Sadece kendi cihazında saklanır.</p>
+            <input type="password" id="gemini-key-input" placeholder="AQ.Ab8RN6...">
             <div class="modal-actions">
                 <button class="reset-btn" onclick="closeKeyModal()">Kapat</button>
                 <button class="save-day-btn" onclick="saveApiKey()">Kaydet</button>
@@ -553,12 +545,10 @@
         </div>
     </div>
 
-    <!-- GÜNLÜK EKRANI -->
     <div id="daily-view">
         <div id="meals-wrapper"></div>
     </div>
 
-    <!-- GEÇMİŞ DEPOSU EKRANI -->
     <div id="history-view" class="hidden">
         <div class="history-controls">
             <span style="font-size: 0.8rem; color: var(--text-muted);">Detay için güne dokun</span>
@@ -571,7 +561,6 @@
         <div id="history-list"></div>
     </div>
 
-    <!-- SABİT ALT BAR -->
     <div class="daily-footer" id="daily-footer">
         <div class="daily-footer-top">
             <span class="daily-footer-title" id="matched-status">Gün Sonu</span>
@@ -647,6 +636,7 @@
             localStorage.setItem('gemini_api_key', geminiApiKey);
             updateKeyButtonUI();
             closeKeyModal();
+            document.getElementById('matched-status').innerText = "API Anahtarı kaydedildi";
         }
 
         function switchTab(tab) {
@@ -751,17 +741,30 @@
             if (!cleanQuery) return [];
             if (aiCache[cleanQuery]) return aiCache[cleanQuery];
 
-            document.getElementById('matched-status').innerText = "AI seçenekleri hazırlıyor...";
+            const statusEl = document.getElementById('matched-status');
+            if (!geminiApiKey) {
+                statusEl.innerText = "Önce sağ üstten 🔑 AI Ekle";
+                return [];
+            }
 
-            if (geminiApiKey) {
-                try {
-                    const prompt = `Sen bir beslenme ve makro veritabanısın. Kullanıcının yazdığı "${query}" ifadesi için Türkiye'de tüketilen en yaygın 4 farklı seçeneği (örneğin tam yağlı, yarım yağlı/light, pişmiş/çiğ veya farklı çeşitleri) 100 gram/ml başına besin değerleriyle birlikte SADECE saf JSON dizisi olarak döndür. Markdown veya açıklama ekleme.
+            statusEl.innerText = "AI seçenekleri hazırlıyor...";
+
+            const prompt = `Sen bir beslenme ve makro veritabanısın. Kullanıcının yazdığı "${query}" ifadesi için Türkiye'de tüketilen en yaygın 4 farklı seçeneği (örneğin tam yağlı, yarım yağlı/light, pişmiş/çiğ veya farklı çeşitleri) 100 gram/ml başına besin değerleriyle birlikte SADECE saf JSON dizisi olarak döndür. Markdown veya açıklama ekleme.
 Format: [{"name": "Ürün Çeşidi Adı", "p": 10.5, "c": 5.0, "f": 18.0, "kcal": 220, "unitWeight": 30}]
 Not: unitWeight, 1 adet/porsiyonun ortalama gramajıdır.`;
 
-                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`, {
+            // Hem yeni AQ. hem eski AIza anahtar formatlarını destekleyen endpoint yapısı
+            const models = ["gemini-2.5-flash", "gemini-2.0-flash"];
+            
+            for (const model of models) {
+                try {
+                    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(geminiApiKey)}`;
+                    const response = await fetch(url, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'x-goog-api-key': geminiApiKey
+                        },
                         body: JSON.stringify({
                             contents: [{ parts: [{ text: prompt }] }],
                             generationConfig: { responseMimeType: "application/json" }
@@ -769,45 +772,26 @@ Not: unitWeight, 1 adet/porsiyonun ortalama gramajıdır.`;
                     });
 
                     const data = await response.json();
+                    if (!response.ok) {
+                        statusEl.innerText = `Hata (${response.status}): ${data.error?.message || 'Anahtar hatası'}`;
+                        continue;
+                    }
+
                     const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
                     if (text) {
-                        const parsed = JSON.parse(text);
+                        const cleanJson = text.replace(/```json|```/g, '').trim();
+                        const parsed = JSON.parse(cleanJson);
                         if (Array.isArray(parsed) && parsed.length > 0) {
                             aiCache[cleanQuery] = parsed;
-                            document.getElementById('matched-status').innerText = "Listeden seçim yap";
+                            statusEl.innerText = "Listeden seçim yap";
                             return parsed;
                         }
                     }
                 } catch (err) {
-                    console.error("Gemini AI hatası:", err);
+                    statusEl.innerText = "Bağlantı hatası";
                 }
             }
 
-            try {
-                const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(cleanQuery)}&search_simple=1&action=process&json=1&page_size=5`;
-                const res = await fetch(url);
-                const data = await res.json();
-                if (data.products && data.products.length > 0) {
-                    const options = data.products
-                        .filter(p => p.nutriments && (p.nutriments['energy-kcal_100g'] || p.nutriments['energy-kcal']))
-                        .slice(0, 4)
-                        .map(p => ({
-                            name: `${p.brands ? p.brands + ' - ' : ''}${p.product_name || cleanQuery}`,
-                            p: parseFloat(p.nutriments.proteins_100g || 0),
-                            c: parseFloat(p.nutriments.carbohydrates_100g || 0),
-                            f: parseFloat(p.nutriments.fat_100g || 0),
-                            kcal: parseFloat(p.nutriments['energy-kcal_100g'] || p.nutriments['energy-kcal'] || 0),
-                            unitWeight: parseFloat(p.serving_quantity || 100)
-                        }));
-                    aiCache[cleanQuery] = options;
-                    document.getElementById('matched-status').innerText = "Listeden seçim yap";
-                    return options;
-                }
-            } catch (e) {
-                console.error(e);
-            }
-
-            document.getElementById('matched-status').innerText = "Sonuç bulunamadı";
             return [];
         }
 
